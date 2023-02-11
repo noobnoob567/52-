@@ -1,0 +1,104 @@
+C51 COMPILER V9.55   DHT11                                                                 07/01/2021 09:07:57 PAGE 1   
+
+
+C51 COMPILER V9.55, COMPILATION OF MODULE DHT11
+OBJECT MODULE PLACED IN dht11.obj
+COMPILER INVOKED BY: D:\danpianji\C51\BIN\C51.EXE SRC\dht11.c COMPACT OPTIMIZE(8,SPEED) BROWSE INCDIR(.\SRC) DEBUG OBJEC
+                    -TEXTEND PRINT(.\dht11.lst) TABS(2) OBJECT(dht11.obj)
+
+line level    source
+
+   1          #include "dht11.h"
+   2          
+   3          sbit Data=P3^6;   //定义数据线
+   4          char rec_dat[9];   //用于显示的接收数据数组
+   5          
+   6          void DHT11_delay_us(char n)
+   7          {
+   8   1          while(--n);
+   9   1      }
+  10          
+  11          void DHT11_delay_ms(int z)
+  12          {
+  13   1         int i,j;
+  14   1         for(i=z;i>0;i--)
+  15   1            for(j=110;j>0;j--);
+  16   1      }
+  17          
+  18          void DHT11_start()
+  19          {
+  20   1         Data=1;
+  21   1         DHT11_delay_us(2);
+  22   1         Data=0;
+  23   1         DHT11_delay_ms(20);   //延时18ms以上
+  24   1         Data=1;
+  25   1         DHT11_delay_us(30);
+  26   1      }
+  27          
+  28          char DHT11_rec_byte()      //接收一个字节
+  29          {
+  30   1        char i,dat=0;
+  31   1        for(i=0;i<8;i++)    //从高到低依次接收8位数据
+  32   1         {          
+  33   2            while(!Data);   //等待50us低电平过去
+  34   2            DHT11_delay_us(8);     //延时60us，如果还为高则数据为1，否则为0 
+  35   2            dat<<=1;           //移位使正确接收8位数据，数据为0时直接移位
+  36   2            if(Data==1)    //数据为1时，使dat加1来接收数据1
+  37   2               dat+=1;
+  38   2            while(Data);  //等待数据线拉低    
+  39   2          }  
+  40   1          return dat;
+  41   1      }
+  42          
+  43          void DHT11_receive()      //接收40位的数据
+  44          {
+  45   1          char R_H,R_L,T_H,T_L,RH,RL,TH,TL,revise; 
+  46   1          DHT11_start();
+  47   1          if(Data==0)
+  48   1          {
+  49   2              while(Data==0);   //等待拉高     
+  50   2              DHT11_delay_us(40);  //拉高后延时80us
+  51   2              R_H=DHT11_rec_byte();    //接收湿度高八位  
+  52   2              R_L=DHT11_rec_byte();    //接收湿度低八位  
+  53   2              T_H=DHT11_rec_byte();    //接收温度高八位  
+  54   2              T_L=DHT11_rec_byte();    //接收温度低八位
+C51 COMPILER V9.55   DHT11                                                                 07/01/2021 09:07:57 PAGE 2   
+
+  55   2              revise=DHT11_rec_byte(); //接收校正位
+  56   2      
+  57   2              DHT11_delay_us(25);    //结束
+  58   2      
+  59   2              if((R_H+R_L+T_H+T_L)==revise)      //校正
+  60   2              {
+  61   3                  RH=R_H;
+  62   3                  RL=R_L;
+  63   3                  TH=T_H;
+  64   3                  TL=T_L;
+  65   3              } 
+  66   2              /*数据处理，方便显示*/
+  67   2              rec_dat[0]='0'+(RH/10);
+  68   2              rec_dat[1]='0'+(RH%10);
+  69   2              rec_dat[2]='R';
+  70   2              rec_dat[3]='H';
+  71   2              rec_dat[4]=' ';
+  72   2              rec_dat[5]=' ';
+  73   2              rec_dat[6]='0'+(TH/10);
+  74   2              rec_dat[7]='0'+(TH%10);
+  75   2              rec_dat[8]='C';
+  76   2          }
+  77   1      }
+  78          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    295    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =      9       6
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

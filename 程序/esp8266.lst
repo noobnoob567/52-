@@ -1,0 +1,139 @@
+C51 COMPILER V9.55   ESP8266                                                               07/01/2021 09:07:57 PAGE 1   
+
+
+C51 COMPILER V9.55, COMPILATION OF MODULE ESP8266
+OBJECT MODULE PLACED IN esp8266.obj
+COMPILER INVOKED BY: D:\danpianji\C51\BIN\C51.EXE SRC\esp8266.c COMPACT OPTIMIZE(8,SPEED) BROWSE INCDIR(.\SRC) DEBUG OBJ
+                    -ECTEXTEND PRINT(.\esp8266.lst) TABS(2) OBJECT(esp8266.obj)
+
+line level    source
+
+   1          #include "esp8266.h"
+   2          bit uart_busy = 0;
+   3          
+   4          
+   5          
+   6          /* ----------------------
+   7              延时5毫秒
+   8          ---------------------- */
+   9          void delay5ms() {
+  10   1          unsigned char a,b;
+  11   1          for(b=101;b>0;b--)
+  12   1              for(a=147;a>0;a--);
+  13   1      }
+  14          
+  15          /* ----------------------
+  16              初始化串口，波特率115200
+  17          ---------------------- */
+  18          void Init_uart(void) 
+  19            {  
+  20   1           SCON=0x50; //串口工作方式1，8位UART，波特率可变  
+  21   1           TH2=0xFF;           
+  22   1           TL2=0xFD;    //波特率:115200 晶振=11.0592MHz 
+  23   1           RCAP2H=0xFF;   
+  24   1           RCAP2L=0xFD; //16位自动再装入值
+  25   1      
+  26   1      
+  27   1      /*****************/
+  28   1           TCLK=1;   
+  29   1           RCLK=1;   
+  30   1           C_T2=0;   
+  31   1           EXEN2=0; //波特率发生器工作方式
+  32   1      
+  33   1      
+  34   1      /*****************/
+  35   1          TR2=1 ; //定时器2开始
+  36   1          EA =1;                 //开总中断  
+  37   1          ES =1;                 //开串口1中断  
+  38   1        }
+  39          
+  40          
+  41          /* ----------------------
+  42            串口发送数据方法
+  43          ---------------------- */
+  44            
+  45          
+  46          
+  47          
+  48          void Uart_SendByteData(unsigned char msg){
+  49   1        while(uart_busy); //等待上一个数据发送完成
+  50   1        SBUF=msg;     
+  51   1        uart_busy = 1;   //串口发送置忙
+  52   1      }
+  53          void Uart_SendStrData(unsigned char *msg){
+  54   1        while(*msg){
+C51 COMPILER V9.55   ESP8266                                                               07/01/2021 09:07:57 PAGE 2   
+
+  55   2          Uart_SendByteData(*msg++);
+  56   2        }
+  57   1      }
+  58          
+  59          void Uart_SendIntData(unsigned int msg)
+  60          {
+  61   1        unsigned char i,j,k;
+  62   1        i = msg/100;
+  63   1        j = (msg%100)/10;
+  64   1        k = (msg%100)%10;
+  65   1        Uart_SendByteData(i);
+  66   1        Uart_SendByteData(j);
+  67   1        Uart_SendByteData(k);
+  68   1      }
+  69          /* ----------------------
+  70            初始化WIFI模块
+  71          ---------------------- */
+  72          void Init_ESP01S(){   
+  73   1        Uart_SendStrData("AT+CIPMUX=1\r\n");            // 设置多连接
+  74   1        delay5ms();   
+  75   1        Uart_SendStrData("AT+CIPSERVER=1,8080\r\n");      // 配置服务器，监听8080端口
+  76   1        delay5ms();
+  77   1      }
+  78          
+  79          
+  80          /*void main(){
+  81            Init_uart();
+  82            Init_ESP01S();    // Init_ESP01S 与 Init_uart调用的顺序不能改变
+  83            
+  84            while(1);
+  85          }
+  86          
+  87          
+  88          /* ----------------------
+  89              串口中断
+  90          ---------------------- */
+  91          /*
+  92          void UART_Interrupt(void) interrupt 4 {
+  93            unsigned char one_char;
+  94            
+  95            if(RI)
+  96            {
+  97              one_char = SBUF;
+  98              RI = 0;
+  99              //解析ESP-01S发送到串口的数据
+ 100            
+ 101            }
+ 102            
+ 103            // 处理发送完成中断
+ 104            if(TI)
+ 105            {
+ 106              TI = 0;
+ 107              uart_busy = 0;
+ 108            }
+ 109            
+ 110          }
+ 111          */
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    210    ----
+   CONSTANT SIZE    =     36    ----
+C51 COMPILER V9.55   ESP8266                                                               07/01/2021 09:07:57 PAGE 3   
+
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----       5
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =      1    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

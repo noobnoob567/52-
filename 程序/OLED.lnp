@@ -1,0 +1,8 @@
+"STARTUP.obj",
+"main.obj",
+"oled.obj",
+"I2C.obj",
+"dht11.obj",
+"esp8266.obj" 
+TO "OLED" 
+RAMSIZE(256) 

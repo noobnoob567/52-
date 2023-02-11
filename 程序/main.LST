@@ -1,0 +1,479 @@
+C51 COMPILER V9.55   MAIN                                                                  07/01/2021 09:07:57 PAGE 1   
+
+
+C51 COMPILER V9.55, COMPILATION OF MODULE MAIN
+OBJECT MODULE PLACED IN main.OBJ
+COMPILER INVOKED BY: D:\danpianji\C51\BIN\C51.EXE main.c COMPACT OPTIMIZE(8,SPEED) BROWSE INCDIR(.\SRC) DEBUG OBJECTEXTE
+                    -ND TABS(2)
+
+line level    source
+
+   1          //////////////////////////////////////////////////////////////////////////////////   
+   2          //ÈÏÊ¶ÊµÏ°³ÌÐò
+   3          //2021.6.17 ½«ad×ª»»µÃµ½µÄÖµÏÔÊ¾ÔÚÆÁÄ»ÉÏ
+   4          //
+   5          //SPI
+   6          //sbit OLED_SCL=P2^7;//Ê±ÖÓ D0£¨SCLK?
+   7          //sbit OLED_SDIN=P2^6;//D1£¨MOSI£© Êý¾Ý
+   8          //sbit OLED_RST =P2^5;//¸´Î»
+   9          //sbit OLED_DC =P2^4;//Êý¾Ý/ÃüÁî¿ØÖÆ
+  10          //sbit OLED_CS=P2^3; //Æ¬Ñ¡
+  11          
+  12          //IIC
+  13          //P10 SCL
+  14          //P11 SDA
+  15          
+  16          //AD vref = 5v
+  17          //DHT11Êý¾ÝÒý½Å½Óp3.6
+  18          //              ----------------------------------------------------------------
+  19          
+  20          #include "REG52.h"
+  21          #include "oled.h"
+  22          //#include "bmp.h"
+  23          #include "I2C.H"
+  24          #include "dht11.h"
+  25          #include "esp8266.h"
+  26          #define uchar unsigned char
+  27          #define  PCF8591 0x90    //PCF8591 µØÖ·
+  28          
+  29          //Õë½Å¶¨Òå
+  30          sbit KEY = P3^2;
+  31          sbit pump1 = P0^0;//Ë®±ÃÓë·çÉÈ¿ØÖÆ±êÖ¾
+  32          sbit pump2 = P0^1;
+  33          sbit fan1 = P0^2;
+  34          sbit fan2 = P0^3;
+  35          
+  36          
+  37          // ±äÁ¿¶¨Òå
+  38          unsigned char AD_CHANNEL;
+  39          //unsigned long xdata  LedOut[8];
+  40          unsigned int  D[3];//´æ´¢adÖµ£¨255£©
+  41          int ad_num1;
+  42          float ad_num2;//×ª»»ÖÐ¼ä±äÁ¿
+  43          unsigned int  N[4];//´æ´¢×ª»»ºóµÄADÖµ
+  44          //1:ÍÁÈÀÊª¶È(°Ù·Ö)  2:¹âÕÕÇ¿¶ÈÖµ(°Ù·Ö)
+  45          unsigned int i,j;//×ª»»Ñ­»·¼ÆÊý
+  46          unsigned int flag = 0;//ÆÁÄ»ÏÔÊ¾Ñ­»·±êÖ¾
+  47          extern char rec_dat[9];//dht11»ñµÃ½á¹û
+  48          unsigned char dht11;//dht11×ª»»½á¹û
+  49          unsigned char receive[8];
+  50          unsigned char k;//´Óesp8266½ÓÊÕµÄÊý×Ö×÷Îª±êÖ¾Î»
+  51          unsigned char buf[3];//ÏòÊÖ»ú·¢ËÍÊ±µÄÊý¾Ý
+  52          extern bit uart_busy;//´®¿ÚÕýÃ¦±êÖ¾
+  53          bit sented;//ÏòÊÖ»úÒÑ¾­·¢ËÍ±êÖ¾
+  54          
+C51 COMPILER V9.55   MAIN                                                                  07/01/2021 09:07:57 PAGE 2   
+
+  55          
+  56          
+  57           //º¯ÊýÉùÃ÷
+  58              bit DACconversion(unsigned char sla,unsigned char c,unsigned char Val);
+  59              bit ISendByte(unsigned char sla,unsigned char c);
+  60              unsigned char IRcvByte(unsigned char sla);
+  61              void int2str(unsigned int msg);
+  62              void fanmove(void);
+  63              void fanstop(void);
+  64              void pumpmove(void);
+  65              void pumpstop(void);
+  66           int main(void)
+  67           {  
+  68   1          
+  69   1         /**********ÒÔÏÂ¸÷Ä£¿é³õÊ¼»¯**************/
+  70   1         fanstop();
+  71   1         pumpstop();
+  72   1         Init_uart();     //´®¿Ú³õÊ¼»¯ baud=115200
+  73   1         Init_ESP01S();    //esp³õÊ¼»¯·¢ËÍÉè¶¨¶Ë¿ÚºÅ //Init_ESP01S Óë Init_uartµ÷ÓÃµÄË³Ðò²»ÄÜ¸Ä±ä
+  74   1         //delay_init();    //ÑÓÊ±º¯Êý³õÊ¼»¯  ÔÚoledÀïÁË  
+  75   1          OLED_Init();      //³õÊ¼»¯OLED  
+  76   1          OLED_Clear();
+  77   1          EX0 = 1;          //Íâ²¿ÖÐ¶Ï0¿ª  
+  78   1          IT0 = 0;          //µÍµçÆ½´¥·¢
+  79   1          EA = 1;           //×ÜÖÐ¶Ï¿ª
+  80   1         
+  81   1        while(1) 
+  82   1        {   
+  83   2          
+  84   2          
+  85   2          
+  86   2            /********ÒÔÏÂAD-DA´¦Àí*************/  
+  87   2        
+  88   2          
+  89   2          for(AD_CHANNEL=0;AD_CHANNEL<4;AD_CHANNEL++)
+  90   2          {
+  91   3              switch(AD_CHANNEL)
+  92   3            {
+  93   4              case 0: ISendByte(PCF8591,0x41);
+  94   4                  D[0]=IRcvByte(PCF8591);  //ADC0 Ä£Êý×ª»»1    ¹âÃôµç×è
+  95   4                break;  
+  96   4            
+  97   4              case 1: ISendByte(PCF8591,0x42);
+  98   4                  D[1]=IRcvByte(PCF8591);  //ADC1 Ä£Êý×ª»»2   ÈÈÃôµç×è
+  99   4                break;  
+ 100   4            
+ 101   4              case 2: ISendByte(PCF8591,0x43);
+ 102   4                  D[2]=IRcvByte(PCF8591);  //ADC2 Ä£Êý×ª»»3    ÍÁÈÀÊª¶È¼Æ
+ 103   4                break;  
+ 104   4            
+ 105   4              case 3: ISendByte(PCF8591,0x40);
+ 106   4                  D[3]=IRcvByte(PCF8591);  //ADC3 Ä£Êý×ª»»4    ¿ÕÆøÖÊÁ¿¼Æ
+ 107   4                break;  
+ 108   4            
+ 109   4              //case 4: DACconversion(PCF8591,0x40, D[4]); //DAC    ÊýÄ£×ª»»
+ 110   4              //     break;
+ 111   4           
+ 112   4            }
+ 113   3            //D[4]=D[3];  //°ÑÄ£ÄâÊäÈë²ÉÑùµÄÐÅºÅ Í¨¹ýÊýÄ£×ª»»Êä³ö     
+ 114   3          }
+ 115   2          
+ 116   2          
+C51 COMPILER V9.55   MAIN                                                                  07/01/2021 09:07:57 PAGE 3   
+
+ 117   2          /************ÒÔÏÂdht11ÎÂÊª¶È¼ì²â**************/
+ 118   2          DHT11_receive();
+ 119   2          
+ 120   2          
+ 121   2          
+ 122   2          /*********ÒÔÏÂÊý×Ö×ª»»ÎªµçÑ¹**********/
+ 123   2      /*
+ 124   2            ad_num2 = D[0];
+ 125   2            ad_num2 = (ad_num2/255)*5;
+ 126   2            ad_num1 = ad_num2;
+ 127   2            N[0] = ad_num1;
+ 128   2            ad_num2 = ((ad_num2-ad_num1)*100);
+ 129   2            N[1] = (int)ad_num2;
+ 130   2      */
+ 131   2          
+ 132   2          /**********ÒÔÏÂÎªÊý×Ö×ª»»ÎªÍÁÈÀÊª¶ÈÖµ*********/
+ 133   2            ad_num2 = D[2];
+ 134   2            ad_num2 = (ad_num2/169)*100;
+ 135   2            ad_num1 = ad_num2;
+ 136   2            N[1] = ad_num1;
+ 137   2          /**********ÒÔÏÂÎªÊý×Ö×ª»»Îª¹âÕÕÇ¿¶ÈÖµ*********/
+ 138   2            ad_num2 = 255-D[0];
+ 139   2            ad_num2 = (ad_num2/255)*100;
+ 140   2            ad_num1 = ad_num2;
+ 141   2            N[2] = ad_num1;
+ 142   2          
+ 143   2          
+ 144   2          /**********ÒÔÏÂÆÁÄ»ÏÔÊ¾*************/
+ 145   2          EX0  = 0;//ÏÔÊ¾¹ý³Ì¹ØÖÐ¶Ï
+ 146   2          switch(flag)
+ 147   2          {
+ 148   3            case 0:
+ 149   3              OLED_ShowString(0,0,"Current_Hum_vol:"); 
+ 150   3              OLED_ShowNum(15,2,N[1],3,16);
+ 151   3              OLED_ShowString(40,2,"%"); 
+ 152   3              break;
+ 153   3            case 1:
+ 154   3              OLED_ShowString(0,0,"Light_Intensity"); 
+ 155   3              OLED_ShowNum(15,2,N[2],3,16);
+ 156   3              OLED_ShowString(40,2,"%");
+ 157   3              break;
+ 158   3            case 2:
+ 159   3              OLED_ShowString(0,0,"Humi&Temp");
+ 160   3              for(i=0;i<9;i++)        
+ 161   3              OLED_ShowChar(10*i,2,rec_dat[i]);
+ 162   3              i = 0;
+ 163   3              break;
+ 164   3            case 3:
+ 165   3              OLED_ShowString(0,0,"Air_Quality:");
+ 166   3              OLED_ShowNum(15,2,D[3],3,16);
+ 167   3              break;
+ 168   3            case 4:
+ 169   3              OLED_ShowString(0,0,"esp8266test");
+ 170   3              for(i=0;i<8;i++)        
+ 171   3              OLED_ShowChar(10*i,3,receive[i]);
+ 172   3              i = 0;
+ 173   3              break;
+ 174   3          }
+ 175   2          
+ 176   2          
+ 177   2          /***********ÒÔÏÂ½øÐÐÓÉÍÁÈÀÊª¶ÈÓë»·¾³ÎÂ¶È½øÐÐµÄË®±ÃÓë·çÉÈ¿ØÖÆ**************/
+ 178   2          if(N[1]<90)
+C51 COMPILER V9.55   MAIN                                                                  07/01/2021 09:07:57 PAGE 4   
+
+ 179   2          {
+ 180   3            pumpmove();
+ 181   3          }
+ 182   2          else
+ 183   2          {
+ 184   3            pumpstop();
+ 185   3          }
+ 186   2          
+ 187   2          //dht11
+ 188   2          dht11 =  rec_dat[0]*10+rec_dat[1];
+ 189   2          dht11 = (int)dht11-16;
+ 190   2          if(dht11>80)
+ 191   2          {
+ 192   3            fanmove();
+ 193   3          }
+ 194   2          else
+ 195   2          {
+ 196   3            fanstop();
+ 197   3          }
+ 198   2          
+ 199   2          EX0  = 1;//ÏÔÊ¾Íê¿ªÖÐ¶Ï
+ 200   2          
+ 201   2          
+ 202   2          /***********ÒÔÏÂ½øÐÐ´®¿ÚÍ¨¹ýWiFiÏòÊÖ»ú·¢ËÍÊý¾Ý**************/
+ 203   2          //¸ù¾Ý½ÓÊÕµ½µÄÊý×Ö¾ö¶¨Ö´ÐÐµÄ²Ù×÷
+ 204   2            if(sented)
+ 205   2            {
+ 206   3              k = receive[1];
+ 207   3              
+ 208   3              switch(k)
+ 209   3              {
+ 210   4                case '0'://·¢ËÍµ±Ç°µÄÍÁÈÀÊª¶È¡¢¹âÕÕÇ¿¶È¡¢»·¾³ÎÂÊª¶È¡¢¿ÕÆøÖÊÁ¿
+ 211   4                Uart_SendStrData("AT+CIPSEND=0,70\r\n");//·¢ËÍÊý¾Ý³õÊ¼»¯
+ 212   4                  delay_ms(20);//µÈ´ý20msÏìÓ¦
+ 213   4                Uart_SendStrData("ÍÁÈÀÊª¶È:");//·¢ËÍÊý¾Ý              
+ 214   4                  int2str(N[1]);
+ 215   4                  Uart_SendStrData(buf);
+ 216   4                Uart_SendStrData("%  ¹âÕÕÇ¿¶È:");
+ 217   4                  int2str(N[2]);
+ 218   4                  Uart_SendStrData(buf);
+ 219   4                Uart_SendStrData("%  »·¾³ÎÂÊª¶È:"); 
+ 220   4                  for(i=0;i<9;i++)        
+ 221   4                  Uart_SendByteData(rec_dat[i]);
+ 222   4                  i = 0;
+ 223   4                  //Uart_SendStrData(rec_dat);  
+ 224   4                  //Uart_SendStrData("  ");
+ 225   4                Uart_SendStrData(" ¿ÕÆøÖÊÁ¿AQI=:");
+ 226   4                  int2str(D[3]);
+ 227   4                  Uart_SendStrData(buf);
+ 228   4                Uart_SendStrData("\r\n");
+ 229   4                  
+ 230   4                  sented = 0;//·¢ËÍÍê±Ï
+ 231   4                  break;
+ 232   4                
+ 233   4                case '1':
+ 234   4                  fanmove();
+ 235   4                  delay_ms(1000);
+ 236   4                  delay_ms(1000);
+ 237   4                  delay_ms(1000);
+ 238   4                  fanstop();
+ 239   4                  sented = 0;//·¢ËÍÍê±Ï
+ 240   4                
+C51 COMPILER V9.55   MAIN                                                                  07/01/2021 09:07:57 PAGE 5   
+
+ 241   4                  break;
+ 242   4                    
+ 243   4                case '2':           
+ 244   4                  pumpmove();
+ 245   4                  delay_ms(1000);
+ 246   4                  delay_ms(1000);
+ 247   4                  delay_ms(1000);
+ 248   4                  pumpstop();
+ 249   4                  sented = 0;//·¢ËÍÍê±Ï
+ 250   4                  break;
+ 251   4              }
+ 252   3          
+ 253   3            }
+ 254   2        
+ 255   2        
+ 256   2        } //while(1)
+ 257   1      
+ 258   1      }//main
+ 259          
+ 260          
+ 261          
+ 262          /*************************************************
+ 263          Íâ²¿ÖÐ¶Ï0·þÎñº¯Êý
+ 264          *************************************************/
+ 265          void ISR_Key(void) interrupt 0 using 1
+ 266          {
+ 267   1        EX0 = 0;
+ 268   1        //delay_ms(20);
+ 269   1        OLED_Clear();
+ 270   1        flag++;
+ 271   1        if(flag>4)
+ 272   1        {
+ 273   2          flag = 0;
+ 274   2        }
+ 275   1        
+ 276   1        while(!KEY)
+ 277   1        {
+ 278   2          ;
+ 279   2        }
+ 280   1        
+ 281   1        //delay_ms(20);
+ 282   1        EX0 = 1;
+ 283   1      }
+ 284          
+ 285          /*************************************************
+ 286          ´®¿ÚÖÐ¶Ï·þÎñº¯Êý
+ 287          *************************************************/
+ 288          
+ 289          void UART_Interrupt(void) interrupt 4 
+ 290            {
+ 291   1          unsigned char res;
+ 292   1          if(RI)
+ 293   1            {
+ 294   2              res = SBUF;
+ 295   2              RI = 0;
+ 296   2              if(res == ':'||i>0)
+ 297   2              {
+ 298   3                receive[i] = res;
+ 299   3                i++;
+ 300   3                if(res == '\n')
+ 301   3                { 
+ 302   4                  i = 0;
+C51 COMPILER V9.55   MAIN                                                                  07/01/2021 09:07:57 PAGE 6   
+
+ 303   4                  //memset(receive,0,8);//Çå¿Õ½ÓÊÕÇø
+ 304   4                }
+ 305   3              } 
+ 306   2              sented = 1;
+ 307   2            }
+ 308   1        
+ 309   1                  // ´¦Àí·¢ËÍÍê³ÉÖÐ¶Ï
+ 310   1        if(TI)
+ 311   1          {
+ 312   2            TI = 0;
+ 313   2            uart_busy = 0;
+ 314   2          }
+ 315   1        
+ 316   1      }
+ 317          
+ 318          
+ 319          /***********************************************
+ 320          ½«Êý×Ö×ª»¯Îª×Ö·û´®º¯Êý
+ 321          ************************************************/
+ 322          void int2str(unsigned int msg)
+ 323          {
+ 324   1        buf[0] = '0'+(msg/100);
+ 325   1        buf[1] = '0'+(msg%100)/10;
+ 326   1        buf[2] = '0'+(msg%100)%10;
+ 327   1      
+ 328   1      }
+ 329          
+ 330          
+ 331          /**********************************************
+ 332          ·çÉÈ×ª¶¯ÓëÍ£Ö¹º¯Êý
+ 333          **********************************************/
+ 334          void fanmove(void)
+ 335          {
+ 336   1            fan1 = 1;
+ 337   1            fan2 = 0;
+ 338   1            OLED_ShowString(70,6,"FAN  GO");
+ 339   1      }
+ 340            
+ 341          void fanstop(void)
+ 342          {
+ 343   1            fan1 = 0;
+ 344   1            fan2 = 0;
+ 345   1            OLED_ShowString(70,6,"FANSTOP");
+ 346   1      }
+ 347          
+ 348          /**********************************************
+ 349          Ë®±Ã×ª¶¯ÓëÍ£Ö¹º¯Êý
+ 350          **********************************************/
+ 351          void pumpmove(void)
+ 352          {
+ 353   1            pump1 = 1;
+ 354   1            pump2 = 0;
+ 355   1            OLED_ShowString(0,6,"PUMP  GO");
+ 356   1      }
+ 357            
+ 358          void pumpstop(void)
+ 359          {
+ 360   1            pump1 = 0;
+ 361   1            pump2 = 0;
+ 362   1            OLED_ShowString(0,6,"PUMPSTOP");
+ 363   1      }
+ 364          
+C51 COMPILER V9.55   MAIN                                                                  07/01/2021 09:07:57 PAGE 7   
+
+ 365          
+ 366          /*******************************************************************
+ 367          DAC ±ä»», ×ª»¯º¯Êý               
+ 368          *******************************************************************/
+ 369          bit DACconversion(unsigned char sla,unsigned char c,  unsigned char Val)
+ 370          {
+ 371   1         Start_I2c();              //Æô¶¯×ÜÏß
+ 372   1         SendByte(sla);            //·¢ËÍÆ÷¼þµØÖ·
+ 373   1         if(ack==0)return(0);
+ 374   1         SendByte(c);              //·¢ËÍ¿ØÖÆ×Ö½Ú
+ 375   1         if(ack==0)return(0);
+ 376   1         SendByte(Val);            //·¢ËÍDACµÄÊýÖµ  
+ 377   1         if(ack==0)return(0);
+ 378   1         Stop_I2c();               //½áÊø×ÜÏß
+ 379   1         return(1);
+ 380   1      }
+ 381          
+ 382          /*******************************************************************
+ 383          ADC·¢ËÍ×Ö½Ú[ÃüÁî]Êý¾Ýº¯Êý               
+ 384          *******************************************************************/
+ 385          bit ISendByte(unsigned char sla,unsigned char c)
+ 386          {
+ 387   1         Start_I2c();              //Æô¶¯×ÜÏß
+ 388   1         SendByte(sla);            //·¢ËÍÆ÷¼þµØÖ·
+ 389   1         if(ack==0)return(0);
+ 390   1         SendByte(c);              //·¢ËÍÊý¾Ý
+ 391   1         if(ack==0)return(0);
+ 392   1         Stop_I2c();               //½áÊø×ÜÏß
+ 393   1         return(1);
+ 394   1      }
+ 395          
+ 396          /*******************************************************************
+ 397          ADC¶Á×Ö½ÚÊý¾Ýº¯Êý               
+ 398          *******************************************************************/
+ 399          unsigned char IRcvByte(unsigned char sla)
+ 400          {  unsigned char c;
+ 401   1      
+ 402   1         Start_I2c();          //Æô¶¯×ÜÏß
+ 403   1         SendByte(sla+1);      //·¢ËÍÆ÷¼þµØÖ·
+ 404   1         if(ack==0)return(0);
+ 405   1         c=RcvByte();          //¶ÁÈ¡Êý¾Ý0
+ 406   1      
+ 407   1         Ack_I2c(1);           //·¢ËÍ·Ç¾Í´ðÎ»
+ 408   1         Stop_I2c();           //½áÊø×ÜÏß
+ 409   1         return(c);
+ 410   1      }
+ 411          
+ 412          
+ 413          
+ 414            /*
+ 415              ÆÁÄ»ÓÃ·¨
+ 416              OLED_Clear();
+ 417              OLED_ShowCHinese(0,0,0);//ÖÐ
+ 418              OLED_ShowCHinese(18,0,1);//¾°
+ 419              OLED_ShowCHinese(36,0,2);//Ô°
+ 420              OLED_ShowCHinese(54,0,3);//µç
+ 421              OLED_ShowCHinese(72,0,4);//×Ó
+ 422              OLED_ShowCHinese(90,0,5);//¿Æ
+ 423              OLED_ShowCHinese(108,0,6);//¼¼
+ 424              OLED_ShowString(0,2,"1.3' OLED TEST");
+ 425              OLED_ShowString(8,2,"ZHONGJINGYUAN");  
+ 426              OLED_ShowString(20,4,"2014/05/01");  
+C51 COMPILER V9.55   MAIN                                                                  07/01/2021 09:07:57 PAGE 8   
+
+ 427              OLED_ShowString(0,6,"ASCII:");  
+ 428              OLED_ShowString(63,6,"CODE:");  
+ 429              OLED_ShowChar(48,6,t);//ÏÔÊ¾ASCII×Ö·û    
+ 430              t++;
+ 431              if(t>'~')t=' ';
+ 432              OLED_ShowNum(103,6,t,3,16);//ÏÔÊ¾ASCII×Ö·ûµÄÂëÖµ  
+ 433              delay_ms(500);
+ 434              OLED_Clear();
+ 435              delay_ms(50);
+ 436              OLED_DrawBMP(0,0,128,8,BMP1);  //Í¼Æ¬ÏÔÊ¾(Í¼Æ¬ÏÔÊ¾É÷ÓÃ£¬Éú³ÉµÄ×Ö±í½Ï´ó£¬»áÕ¼ÓÃ½Ï¶à¿Õ¼ä£¬FLASH¿Õ¼ä8KÒÔÏÂÉ
+             -÷ÓÃ)
+ 437              delay_ms(200);
+ 438              LED6=1;
+ 439              OLED_DrawBMP(0,0,128,8,BMP2);
+ 440              delay_ms(500);*/
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   1327    ----
+   CONSTANT SIZE    =    178    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =     40       7
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =      1    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
